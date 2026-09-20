@@ -89,7 +89,7 @@ canvas#seqCanvas{ display:block; width:100%; }
 .mstrip-mono-btn.active{ background:#3aa8e8; color:#fff; }
 .mstrip-lbl-mini{ font-size:5px; font-weight:bold; color:#555; }
 .mstrip-allclr-btn{ background:#2a6fd8; border-color:#0a2a6a; color:#fff; width:32px; font-size:4.8px; white-space:nowrap; letter-spacing:-0.3px; }
-.mstrip-clr-btn{ background:#7ec8ee; border-color:#1a70a8; color:#0a2a4a; width:32px; }
+.mstrip-clr-solo-btn,.mstrip-clr-mute-btn{ background:#7ec8ee; border-color:#1a70a8; color:#0a2a4a; width:32px; }
 .mstrip.mstrip-master{ background:rgba(0,0,0,.06); border:1px solid rgba(0,0,0,.15); }
 .mstrip-label{ font-size:7.5px; font-weight:bold; color:#333; letter-spacing:.3px; }
 .mstrip-knob-box{ position:relative; width:22px; height:22px; flex-shrink:0; }
@@ -606,7 +606,7 @@ canvas#seqCanvas{ display:block; width:100%; }
   /* パート名フォント2倍、MASTERストリップのCLR/ALL CLR/MONO/REV RTN表記も2倍 */
   .mstrip-label{ font-size:15px; }
   .mstrip-lbl-mini{ font-size:10px; }
-  .mstrip-sm-btn.mstrip-mono-btn,.mstrip-sm-btn.mstrip-allclr-btn,.mstrip-sm-btn.mstrip-clr-btn{ width:64px; height:26px; font-size:13px; border-radius:6px; }
+  .mstrip-sm-btn.mstrip-mono-btn,.mstrip-sm-btn.mstrip-allclr-btn,.mstrip-sm-btn.mstrip-clr-solo-btn,.mstrip-sm-btn.mstrip-clr-mute-btn{ width:64px; height:26px; font-size:13px; border-radius:6px; }
   .mstrip-sm-btn.mstrip-allclr-btn{ font-size:9.6px; }
 
   /* REVERB/CHST/MASTERセクションの高さを90pxに拡張(内容を縦中央寄せ) */
@@ -6396,10 +6396,10 @@ function buildMixerStrips(){
       <div class="mstrip-lbl-mini">REV RTN</div>
       <div class="mstrip-sm-btn mstrip-allclr-btn">ALL CLR</div>
       <div class="mstrip-spacer-flex"></div>
-      <div class="mstrip-sm-btn mstrip-clr-btn">CLR</div>
+      <div class="mstrip-sm-btn mstrip-clr-solo-btn">CLR</div>
       <div class="mstrip-fader mstrip-fader-master"><div class="mstrip-fader-cap" style="top:30%;"></div></div>
       <div class="mstrip-val">80</div>
-      <div class="mstrip-sm-btn mstrip-clr-btn">CLR</div>`:`
+      <div class="mstrip-sm-btn mstrip-clr-mute-btn">CLR</div>`:`
       <div class="mstrip-label">${locked?'ー':ch}</div>
       <div class="mstrip-knob-box"><div class="mstrip-knob mstrip-knob-trim"><div class="mstrip-knob-ind"></div></div></div>
       <div class="mstrip-knob-box"><div class="mstrip-knob mstrip-knob-rev"><div class="mstrip-knob-ind"></div></div></div>
@@ -6455,6 +6455,38 @@ function buildMixerStrips(){
         onBtn.textContent=on?'ON':'OFF';
       }
     });
+  });
+  const _clrFields=(fields)=>{
+    // S/M QTZがON+再生中なら、個別のMute/Soloボタンと同様に保留(点滅)にして次の小節頭で確定する。
+    // それ以外は従来通り即座にクリアする
+    if(_isSmQtzOn()&&state.playing){
+      state.mix.forEach((m,i)=>{
+        if(!_smQtzPending[i])_smQtzPending[i]={};
+        fields.forEach(f=>{_smQtzPending[i][f]=false;});
+      });
+      document.querySelectorAll('.mstrip-solo,.mstrip-mute').forEach(btn=>{
+        const isSolo=btn.classList.contains('mstrip-solo');
+        if((isSolo&&fields.includes('soloed'))||(!isSolo&&fields.includes('muted'))) btn.classList.add('sm-qtz-pending');
+      });
+    }else{
+      state.mix.forEach((m,i)=>{
+        fields.forEach(f=>{m[f]=false;});
+        _updateChNode(i);
+      });
+      buildMixerStrips();
+    }
+  };
+  area.querySelectorAll('.mstrip-clr-solo-btn').forEach(btn=>{
+    // 上のCLR: 全パート+BASSのSoloをクリア
+    btn.addEventListener('click',()=>_clrFields(['soloed']));
+  });
+  area.querySelectorAll('.mstrip-clr-mute-btn').forEach(btn=>{
+    // 下のCLR: 全パート+BASSのMuteをクリア
+    btn.addEventListener('click',()=>_clrFields(['muted']));
+  });
+  area.querySelectorAll('.mstrip-allclr-btn').forEach(btn=>{
+    // ALL CLR: 全パート+BASSのMuteとSoloをクリア
+    btn.addEventListener('click',()=>_clrFields(['muted','soloed']));
   });
   area.querySelectorAll('.mstrip').forEach(st=>{
     const ch=st.dataset.ch,isMaster=ch==='MASTER';
